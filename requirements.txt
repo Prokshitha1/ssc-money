@@ -1,4 +1,7 @@
 streamlit
-google-generativeai
 yfinance
-plotly
+pandas
+matplotlib
+google-generativeai
+scikit-learn
+openai
