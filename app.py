@@ -5,9 +5,7 @@ import plotly.graph_objects as go
 import time
 import os
 
-# Initialize the Gemini API key (using secrets or environment variable)
-api_key = os.getenv("GEMINI_API_KEY")
-genai.configure(api_key=api_key)
+genai.configure(api_key="AIzaSyCYglyfcX2HUAgjCZ2M6gARfC-zoPg2txc")
 
 # Function to fetch stock data from Yahoo Finance with rate limit handling
 def get_stock_data(ticker):
