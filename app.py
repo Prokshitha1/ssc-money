@@ -1,145 +1,72 @@
 import streamlit as st
-import google.generativeai as genai
 import yfinance as yf
-import plotly.graph_objects as go
-import time
-import os
+import numpy as np
+import pandas as pd
+import plotly.graph_objs as go
+from model import predict_prices
+from fundamentals import get_fundamentals
+from datetime import datetime, timedelta
 
-genai.configure(api_key="AIzaSyCYglyfcX2HUAgjCZ2M6gARfC-zoPg2txc")
+# Set page config
+st.set_page_config(page_title="📈 Stock Analyzer by Shiva Sai Chakradhar", layout="wide")
 
-# Function to fetch stock data from Yahoo Finance with rate limit handling
-def get_stock_data(ticker):
-    while True:
-        try:
-            stock = yf.Ticker(ticker)
-            info = stock.info
-            history = stock.history(period="1y")
-            return info, history
-        except yf.exceptions.YFRateLimitError:
-            print("Rate limit exceeded, retrying after 60 seconds...")
-            time.sleep(60)  # Wait for 60 seconds before retrying
+# CSS Styling
+st.markdown("""
+    <style>
+        .main { background-color: #f0f2f6; }
+        .block-container { padding-top: 2rem; }
+        .footer { position: fixed; left: 0; bottom: 0; width: 100%; text-align: center; padding: 10px; font-size: 18px; font-weight: bold; animation: colorchange 3s infinite; }
+        @keyframes colorchange {
+            0% { color: red; }
+            25% { color: blue; }
+            50% { color: green; }
+            75% { color: orange; }
+            100% { color: red; }
+        }
+    </style>
+""", unsafe_allow_html=True)
 
-# Function to plot stock price chart
-def plot_stock_chart(history):
-    fig = go.Figure(data=[go.Candlestick(
-        x=history.index,
-        open=history['Open'],
-        high=history['High'],
-        low=history['Low'],
-        close=history['Close'],
-        name="Stock Price"
-    )])
-    fig.update_layout(title="Stock Price Chart", xaxis_title="Date", yaxis_title="Price", template="plotly_dark")
-    st.plotly_chart(fig)
+st.title("📊 Stock Price & Financial Status Analyzer")
 
-# Function to generate LLM-based stock insights
-def generate_llm_insights(stock_data):
-    prompt = f"""
-    Please provide an insightful summary of the stock performance based on the following details:
+# Sidebar for ticker input
+ticker = st.text_input("Enter Stock Ticker (e.g., AAPL)", value="AAPL")
+search_btn = st.button("🔍 Search")
 
-    Stock Information:
-    - PE Ratio: {stock_data.get('trailingPE', 'N/A')}
-    - PB Ratio: {stock_data.get('priceToBook', 'N/A')}
-    - EPS: {stock_data.get('trailingEps', 'N/A')}
-    - Market Cap: {stock_data.get('marketCap', 'N/A')}
-    - Volume: {stock_data.get('volume', 'N/A')}
-    
-    Financial Trends:
-    - Describe the overall performance and trends based on the above information. Consider market conditions, growth potential, and any possible future outlook.
-
-    Provide your response in a concise, informative manner.
-    """
-    
+if search_btn and ticker:
     try:
-        # Generate LLM Insights using Gemini API
-        response = genai.Completion.create(
-            model="google/generative-ai", 
-            prompt=prompt,
-            max_output_tokens=300
-        )
-        insights = response['choices'][0]['text']
-        return insights.strip()
-    except Exception as e:
-        return f"Error generating insights: {e}"
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="6mo")
 
-# Streamlit Layout
-st.set_page_config(page_title="Stock Search Engine", page_icon="📈", layout="wide")
+        # Charts Column
+        col1, col2, col3, col4 = st.columns([2.5, 2, 1.5, 2])
 
-# Title and ticker input
-st.title("📈 Stock Search Engine")
-
-# Input field for the stock ticker and a search button
-ticker = st.text_input("Enter Stock Ticker", "AAPL")
-search_button = st.button("Search")
-
-if search_button:
-    if ticker:
-        # Fetch stock data
-        info, history = get_stock_data(ticker)
-
-        # Create columns for different sections
-        col1, col2, col3, col4 = st.columns(4)
-
-        # Column 1: Stock Chart
         with col1:
-            st.markdown("<h3 style='color: #00bfae;'>📊 Stock Chart</h3>", unsafe_allow_html=True)
-            plot_stock_chart(history)
+            st.subheader(f"📈 {ticker} Stock Price Chart")
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], mode='lines', name='Close'))
+            fig.update_layout(title=f"{ticker} Closing Price", xaxis_title="Date", yaxis_title="Price", height=400)
+            st.plotly_chart(fig, use_container_width=True)
 
-        # Column 2: Key Metrics
         with col2:
-            st.markdown("<h3 style='color: #FF6347;'>📊 Key Metrics</h3>", unsafe_allow_html=True)
-            st.write(f"**PE Ratio:** {info.get('trailingPE', 'N/A')}")
-            st.write(f"**PB Ratio:** {info.get('priceToBook', 'N/A')}")
-            st.write(f"**EPS:** {info.get('trailingEps', 'N/A')}")
-            st.write(f"**Market Cap:** {info.get('marketCap', 'N/A')}")
-            st.write(f"**Volume:** {info.get('volume', 'N/A')}")
+            st.subheader("📊 Financial Indicators")
+            metrics = get_fundamentals(stock)
+            for key, value in metrics.items():
+                st.metric(label=key, value=value)
 
-        # Column 3: Holdings
         with col3:
-            st.markdown("<h3 style='color: #FFD700;'>🏢 Holdings</h3>", unsafe_allow_html=True)
-            st.write("Here you can see information about major institutional holdings.")
+            st.subheader("📈 Predicted Prices (Next 7 Days)")
+            predicted = predict_prices(hist['Close'])
+            for i, price in enumerate(predicted):
+                st.write(f"Day {i+1}: ${price:.2f}")
 
-        # Column 4: Peers
         with col4:
-            st.markdown("<h3 style='color: #32CD32;'>🔗 Peers</h3>", unsafe_allow_html=True)
-            st.write("Here you can see information about competitors or similar stocks.")
+            st.subheader("🧍 Peers & Holdings")
+            st.write("(Static/Optional for now)")
+            st.write("Peers: MSFT, GOOG, AMZN")
+            st.write("Holdings: BlackRock, Vanguard")
 
-        # LLM Insights Section
-        st.subheader("✨ LLM Stock Insights")
-        insights = generate_llm_insights(info)
-        st.write(insights)
+    except Exception as e:
+        st.error(f"Failed to fetch data: {e}")
 
-# Footer with color animation
-footer_html = """
-<style>
-/* Keyframe animation for changing colors */
-@keyframes colorChange {
-  0% {color: #FF6347;}   /* Tomato */
-  25% {color: #FFD700;}  /* Gold */
-  50% {color: #00bfae;}  /* Teal */
-  75% {color: #32CD32;}  /* Lime Green */
-  100% {color: #FF6347;} /* Tomato */
-}
-
-/* Style for footer */
-footer {
-  position: fixed;
-  bottom: 10px;
-  width: 100%;
-  text-align: center;
-  font-size: 18px;
-  font-weight: bold;
-  animation: colorChange 3s infinite;
-  font-family: 'Arial', sans-serif;
-  background-color: rgba(0, 0, 0, 0.8); /* semi-transparent background */
-  padding: 10px;
-  color: white;
-  border-radius: 5px;
-}
-</style>
-<footer>
-    <p>This app is made by Shiva Sai Chakradhar</p>
-</footer>
-"""
-
-st.markdown(footer_html, unsafe_allow_html=True)
+# Footer
+st.markdown('<div class="footer">This app is made by Shiva Sai Chakradhar 💡</div>', unsafe_allow_html=True)
