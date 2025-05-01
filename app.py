@@ -2,11 +2,13 @@ import streamlit as st
 import google.generativeai as genai
 import yfinance as yf
 import plotly.graph_objects as go
+import os
 
-# Initialize the Gemini API key
-genai.configure(api_key="AIzaSyCYglyfcX2HUAgjCZ2M6gARfC-zoPg2txc")
+# Initialize the Gemini API key (using secrets or environment variable)
+api_key = os.getenv("AIzaSyCYglyfcX2HUAgjCZ2M6gARfC-zoPg2txc")
+genai.configure(api_key=api_key)
 
-# Function to fetch stock data
+# Function to fetch stock data from Yahoo Finance
 def get_stock_data(ticker):
     stock = yf.Ticker(ticker)
     info = stock.info
@@ -14,7 +16,7 @@ def get_stock_data(ticker):
     
     return info, history
 
-# Function to display stock chart
+# Function to plot stock price chart
 def plot_stock_chart(history):
     fig = go.Figure(data=[go.Candlestick(
         x=history.index,
@@ -27,39 +29,48 @@ def plot_stock_chart(history):
     fig.update_layout(title="Stock Price Chart", xaxis_title="Date", yaxis_title="Price", template="plotly_dark")
     st.plotly_chart(fig)
 
-# Function to get peers and holdings (stubbed for now)
-def get_peers_and_holdings(ticker):
-    peers = ["Peer 1", "Peer 2", "Peer 3"]
-    holdings = {"Institution A": 10.0, "Institution B": 5.0}
-    
-    return peers, holdings
+# Function to generate LLM-based stock insights
+def generate_llm_insights(stock_data):
+    prompt = f"""
+    Please provide an insightful summary of the stock performance based on the following details:
 
-# Function to generate insights using Gemini AI
-def get_stock_insights(ticker):
+    Stock Information:
+    - PE Ratio: {stock_data.get('trailingPE', 'N/A')}
+    - PB Ratio: {stock_data.get('priceToBook', 'N/A')}
+    - EPS: {stock_data.get('trailingEps', 'N/A')}
+    - Market Cap: {stock_data.get('marketCap', 'N/A')}
+    - Volume: {stock_data.get('volume', 'N/A')}
+    
+    Financial Trends:
+    - Describe the overall performance and trends based on the above information. Consider market conditions, growth potential, and any possible future outlook.
+
+    Provide your response in a concise, informative manner.
+    """
+    
     try:
+        # Generate LLM Insights using Gemini API
         response = genai.Completion.create(
             model="google/generative-ai", 
-            prompt=f"Provide an analysis and summary for the stock {ticker} based on its recent performance, including its financials, trends, and market sentiment.",
-            max_output_tokens=200
+            prompt=prompt,
+            max_output_tokens=300
         )
-        return response['choices'][0]['text']
+        insights = response['choices'][0]['text']
+        return insights.strip()
     except Exception as e:
         return f"Error generating insights: {e}"
 
-# Streamlit layout
+# Streamlit Layout
 st.set_page_config(page_title="Stock Search Engine", page_icon="📈", layout="wide")
 
-# Title
+# Title and ticker input
 st.title("📈 Stock Search Engine")
-
-# Stock search box
 ticker = st.text_input("Enter Stock Ticker", "AAPL")
 
 if ticker:
     # Fetch stock data
     info, history = get_stock_data(ticker)
 
-    # Create columns with color styling and descriptions on the left
+    # Create columns for different sections
     col1, col2, col3, col4 = st.columns(4)
 
     # Column 1: Stock Chart
@@ -73,27 +84,22 @@ if ticker:
         st.write(f"**PE Ratio:** {info.get('trailingPE', 'N/A')}")
         st.write(f"**PB Ratio:** {info.get('priceToBook', 'N/A')}")
         st.write(f"**EPS:** {info.get('trailingEps', 'N/A')}")
-        st.write(f"**Book Value:** {info.get('bookValue', 'N/A')}")
-        st.write(f"**Volume:** {info.get('volume', 'N/A')}")
         st.write(f"**Market Cap:** {info.get('marketCap', 'N/A')}")
+        st.write(f"**Volume:** {info.get('volume', 'N/A')}")
 
     # Column 3: Holdings
     with col3:
         st.markdown("<h3 style='color: #FFD700;'>🏢 Holdings</h3>", unsafe_allow_html=True)
-        holdings = get_peers_and_holdings(ticker)[1]
-        for institution, percent in holdings.items():
-            st.write(f"{institution}: {percent}%")
+        st.write("Here you can see information about major institutional holdings.")
 
     # Column 4: Peers
     with col4:
         st.markdown("<h3 style='color: #32CD32;'>🔗 Peers</h3>", unsafe_allow_html=True)
-        peers = get_peers_and_holdings(ticker)[0]
-        for peer in peers:
-            st.write(peer)
+        st.write("Here you can see information about competitors or similar stocks.")
 
-    # Stock Insights (below the columns)
-    st.subheader("✨ Stock Insights")
-    insights = get_stock_insights(ticker)
+    # LLM Insights Section
+    st.subheader("✨ LLM Stock Insights")
+    insights = generate_llm_insights(info)
     st.write(insights)
 
 # Footer with color animation
