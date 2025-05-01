@@ -2,19 +2,24 @@ import streamlit as st
 import google.generativeai as genai
 import yfinance as yf
 import plotly.graph_objects as go
+import time
 import os
 
 # Initialize the Gemini API key (using secrets or environment variable)
-api_key = os.getenv("AIzaSyCYglyfcX2HUAgjCZ2M6gARfC-zoPg2txc")
+api_key = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
 
-# Function to fetch stock data from Yahoo Finance
+# Function to fetch stock data from Yahoo Finance with rate limit handling
 def get_stock_data(ticker):
-    stock = yf.Ticker(ticker)
-    info = stock.info
-    history = stock.history(period="1y")
-    
-    return info, history
+    while True:
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            history = stock.history(period="1y")
+            return info, history
+        except yf.exceptions.YFRateLimitError:
+            print("Rate limit exceeded, retrying after 60 seconds...")
+            time.sleep(60)  # Wait for 60 seconds before retrying
 
 # Function to plot stock price chart
 def plot_stock_chart(history):
@@ -64,43 +69,47 @@ st.set_page_config(page_title="Stock Search Engine", page_icon="📈", layout="w
 
 # Title and ticker input
 st.title("📈 Stock Search Engine")
+
+# Input field for the stock ticker and a search button
 ticker = st.text_input("Enter Stock Ticker", "AAPL")
+search_button = st.button("Search")
 
-if ticker:
-    # Fetch stock data
-    info, history = get_stock_data(ticker)
+if search_button:
+    if ticker:
+        # Fetch stock data
+        info, history = get_stock_data(ticker)
 
-    # Create columns for different sections
-    col1, col2, col3, col4 = st.columns(4)
+        # Create columns for different sections
+        col1, col2, col3, col4 = st.columns(4)
 
-    # Column 1: Stock Chart
-    with col1:
-        st.markdown("<h3 style='color: #00bfae;'>📊 Stock Chart</h3>", unsafe_allow_html=True)
-        plot_stock_chart(history)
+        # Column 1: Stock Chart
+        with col1:
+            st.markdown("<h3 style='color: #00bfae;'>📊 Stock Chart</h3>", unsafe_allow_html=True)
+            plot_stock_chart(history)
 
-    # Column 2: Key Metrics
-    with col2:
-        st.markdown("<h3 style='color: #FF6347;'>📊 Key Metrics</h3>", unsafe_allow_html=True)
-        st.write(f"**PE Ratio:** {info.get('trailingPE', 'N/A')}")
-        st.write(f"**PB Ratio:** {info.get('priceToBook', 'N/A')}")
-        st.write(f"**EPS:** {info.get('trailingEps', 'N/A')}")
-        st.write(f"**Market Cap:** {info.get('marketCap', 'N/A')}")
-        st.write(f"**Volume:** {info.get('volume', 'N/A')}")
+        # Column 2: Key Metrics
+        with col2:
+            st.markdown("<h3 style='color: #FF6347;'>📊 Key Metrics</h3>", unsafe_allow_html=True)
+            st.write(f"**PE Ratio:** {info.get('trailingPE', 'N/A')}")
+            st.write(f"**PB Ratio:** {info.get('priceToBook', 'N/A')}")
+            st.write(f"**EPS:** {info.get('trailingEps', 'N/A')}")
+            st.write(f"**Market Cap:** {info.get('marketCap', 'N/A')}")
+            st.write(f"**Volume:** {info.get('volume', 'N/A')}")
 
-    # Column 3: Holdings
-    with col3:
-        st.markdown("<h3 style='color: #FFD700;'>🏢 Holdings</h3>", unsafe_allow_html=True)
-        st.write("Here you can see information about major institutional holdings.")
+        # Column 3: Holdings
+        with col3:
+            st.markdown("<h3 style='color: #FFD700;'>🏢 Holdings</h3>", unsafe_allow_html=True)
+            st.write("Here you can see information about major institutional holdings.")
 
-    # Column 4: Peers
-    with col4:
-        st.markdown("<h3 style='color: #32CD32;'>🔗 Peers</h3>", unsafe_allow_html=True)
-        st.write("Here you can see information about competitors or similar stocks.")
+        # Column 4: Peers
+        with col4:
+            st.markdown("<h3 style='color: #32CD32;'>🔗 Peers</h3>", unsafe_allow_html=True)
+            st.write("Here you can see information about competitors or similar stocks.")
 
-    # LLM Insights Section
-    st.subheader("✨ LLM Stock Insights")
-    insights = generate_llm_insights(info)
-    st.write(insights)
+        # LLM Insights Section
+        st.subheader("✨ LLM Stock Insights")
+        insights = generate_llm_insights(info)
+        st.write(insights)
 
 # Footer with color animation
 footer_html = """
